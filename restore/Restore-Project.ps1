@@ -19,8 +19,10 @@ if ($IsWinEnv ) { Write-Host -ForegroundColor Yellow "We are on Windows Build En
 # we assume, we start this script in projects "restore" directory
 $currentDir = Get-Location
 Set-Location ..
+
 $subprojects = Get-ChildItem -File lib
-Get-ChildItem -File lib
+# Jus for listing the Informations
+Write-Host $subprojects
 $projectDir = Get-Location
 
 
@@ -43,8 +45,10 @@ if (!$?) { exit 1 }
 
 Set-Location ..
 foreach ($subproject in $subprojects) {
-    $cloned = 0
-    if ($subproject.Name -eq "knx")
+  $cloned = 0
+  $ProjectFile = Get-ChildItem -File $projectDir"\lib\"$subproject | Select-Object BaseName
+  if( ![string]::IsNullOrWhitespace($ProjectFile.BaseName) ) {
+    if ($ProjectFile.BaseName -eq "knx")
     {
         # the following command may fail, because the project might already have been cloned
         git clone https://github.com/thelsing/knx.git
@@ -53,10 +57,10 @@ foreach ($subproject in $subprojects) {
         }
         $cloned = 1
     }
-    elseif ($subproject.Name -ne "README")
+    elseif ($ProjectFile.BaseName -ne "README")
     {
         # the following command may fail, because the project might already have been cloned
-        $GitClone= "https://github.com/OpenKNX/"+$subproject.Name+".git" 
+        $GitClone= "https://github.com/OpenKNX/"+$ProjectFile.BaseName+".git" 
         Write-Host -ForegroundColor Yellow $GitClone
         git clone $GitClone
         if (!$?) { 
@@ -70,23 +74,42 @@ foreach ($subproject in $subprojects) {
         #  - to create a link with mklink, we have to remove the existing file first
         #  - if link creation fails, the file is missed, if we restart the script
         # for robustness, we rename first and delete only if link creation was successful
-        Rename-Item $projectDir/lib/$subproject.Name $projectDir/lib/tmp-openknx-restore
+        Rename-Item $projectDir"\lib\"$subproject $projectDir"\lib\tmp-openknx-restore"
         if (!$?) { exit 1 }
         # this has to be a cmd-shell to work in developer mode
-        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject.Name" -Value "..\..\$subproject.Name" }
-        else { cmd /c "mklink /D `"$projectDir\lib\$subproject`" ..\..\$subproject" }
+        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject" -Value "..\..\$subproject" 
+		} else { 
+		  Write-Host "##############################################"
+      Write-Host "This is our current location: "
+      Get-Location
+      Write-Host "##############################################"
+      
+      $lnkPath = "$projectDir\lib\"
+		  #$linkTarget = "..\..\"+$ProjectFile.BaseName
+		  $linkTarget = $ProjectFile.BaseName
+      #$lnkName = $subproject
+		  $lnkName = $linkTarget
+      Write-Host "This will be now Called:" 
+      Write-Host New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget -Force
+		  Write-Host "##############################################"
+      
+      timeout /T 20
+      #New-Item -Path C:\Users\erkan\OAM-LogicModule\lib\ -Name knx.lnk -ItemType Junction -Value ..\..\knx
+		  New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget
+		  
+		}
         
-
         if ($?) { 
             # link creation successful, now we can safely delete old renamed file
             Remove-Item $projectDir/lib/tmp-openknx-restore
             if (!$?) { exit 1 }
         } else {
             # link creation failed, we restore previous state and leave script
-            Rename-Item $projectDir/lib/tmp-openknx-restore $projectDir/lib/$subproject.Name 
+            Rename-Item $projectDir/lib/tmp-openknx-restore $projectDir/lib/$subproject 
             exit 1 
         }
     }
+  }
 }
 if ($subprojects.Count -le 1) {
     Write-Host "Everything is fine, project is already in expected state"
