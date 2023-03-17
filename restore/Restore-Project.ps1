@@ -12,9 +12,9 @@ $script:IsLinuxEnv = (Get-Variable -Name "IsLinux" -ErrorAction Ignore) -and $Is
 $script:IsMacOSEnv = (Get-Variable -Name "IsMacOS" -ErrorAction Ignore) -and $IsMacOS
 $script:IsWinEnv = !$IsLinuxEnv -and !$IsMacOSEnv
 
-if ($IsLinuxEnv) { Write-Host "We are on Linux Env" }
-if ($IsMacOSEnv ) { Write-Host "We are on MacOS Env" }
-if ($IsWinEnv ) { Write-Host "We are on Windows Env" }
+if ($IsLinuxEnv) { Write-Host -ForegroundColor Yellow "We are on Linux Build Enviroment" }
+if ($IsMacOSEnv ) { Write-Host -ForegroundColor Yellow "We are on MacOS Build Enviroment" }
+if ($IsWinEnv ) { Write-Host -ForegroundColor Yellow "We are on Windows Build Enviroment" }
 
 # we assume, we start this script in projects "restore" directory
 $currentDir = Get-Location
@@ -25,7 +25,11 @@ $projectDir = Get-Location
 
 
 # we first check, if we are in Admin- or Developer mode and allowed to create symlinks:
-if ($IsWinEnv) { 
+if ($IsMacOS -or $IsLinux) {
+  New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
+  # cleanup after test
+  Remove-Item -Path "$projectDir\lib\linktest" -Force
+} else { 
   cmd /c "mklink /D `"$projectDir\lib\linktest`" ..\restore"
   if (!$?) { 
       Write-Host "You need Developer-Mode or Administrator privileges to execute this script!"
@@ -34,11 +38,6 @@ if ($IsWinEnv) {
   }
   #cleanup after test
   cmd /c "rmdir `"$projectDir\lib\linktest`""
-
-} else {
-  New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
-  # cleanup after test
-  Remove-Item -Path "$projectDir\lib\linktest" -Force
 }
 if (!$?) { exit 1 }
 
@@ -74,8 +73,9 @@ foreach ($subproject in $subprojects) {
         Rename-Item $projectDir/lib/$subproject.Name $projectDir/lib/tmp-openknx-restore
         if (!$?) { exit 1 }
         # this has to be a cmd-shell to work in developer mode
-        if ($IsWinEnv) { cmd /c "mklink /D `"$projectDir\lib\$subproject`" ..\..\$subproject" }
-        else { New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject.Name" -Value "..\..\$subproject.Name" }
+        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject.Name" -Value "..\..\$subproject.Name" }
+        else { cmd /c "mklink /D `"$projectDir\lib\$subproject`" ..\..\$subproject" }
+        
 
         if ($?) { 
             # link creation successful, now we can safely delete old renamed file
@@ -92,4 +92,4 @@ if ($subprojects.Count -le 1) {
     Write-Host "Everything is fine, project is already in expected state"
 }
 Set-Location $currentDir
-if ($IsWinEnv) { timeout /T 20 } else { Start-Sleep -Seconds 5 }
+if ($IsMacOS -or $IsLinux) { Start-Sleep -Seconds 5 } else { timeout /T 20 }
