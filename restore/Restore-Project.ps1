@@ -1,11 +1,13 @@
-# check on which os we are
+# check on which os we are running
+# After check, the Os-Informations are availibe in the PS-Env.
 if ($PSVersionTable.PSVersion.Major -lt 6.0) {
-  switch ($([System.Environment]::OSVersion.Platform)) {
-      'Win32NT' { 
-          New-Variable -Option Constant -Name IsWindows -Value $True -ErrorAction SilentlyContinue
-          New-Variable -Option Constant -Name IsLinux -Value $false -ErrorAction SilentlyContinue
-          New-Variable -Option Constant -Name IsMacOs -Value $false -ErrorAction SilentlyContinue
-      }
+  switch ($([System.Environment]::OSVersion.Platform)) 
+  { 'Win32NT' 
+    { 
+      New-Variable -Option Constant -Name IsWindows -Value $True -ErrorAction SilentlyContinue
+      New-Variable -Option Constant -Name IsLinux -Value $false -ErrorAction SilentlyContinue
+      New-Variable -Option Constant -Name IsMacOs -Value $false -ErrorAction SilentlyContinue
+    }
   }
 }
 $script:IsLinuxEnv = (Get-Variable -Name "IsLinux" -ErrorAction Ignore) -and $IsLinux
@@ -20,27 +22,24 @@ if ($IsWinEnv ) { Write-Host -ForegroundColor Yellow "We are on Windows Build En
 $currentDir = Get-Location
 Set-Location ..
 
+# Get the files in sub dir /lib
 $subprojects = Get-ChildItem -File lib
-# Jus for listing the Informations
+
+# Just for listing the Informations
 Write-Host $subprojects
 $projectDir = Get-Location
 
-
-# we first check, if we are in Admin- or Developer mode and allowed to create symlinks:
-if ($IsMacOS -or $IsLinux) {
-  New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
+# Check if we can create SymbolicLink link
+#if ($IsMacOS -or $IsLinux) {
+  #New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
   # cleanup after test
-  Remove-Item -Path "$projectDir\lib\linktest" -Force
-} else { 
-  cmd /c "mklink /D `"$projectDir\lib\linktest`" ..\restore"
-  if (!$?) { 
-      Write-Host "You need Developer-Mode or Administrator privileges to execute this script!"
-      timeout /T 20
-      exit 1 
-  }
-  #cleanup after test
-  cmd /c "rmdir `"$projectDir\lib\linktest`""
-}
+  #Remove-Item -Path "$projectDir\lib\linktest" -Force 
+#} else {
+  #New-Item -Path $projectDir\lib -Name "linktest" -ItemType Junction -Value "restore"
+  # cleanup after test
+  #Remove-Item -Path "$projectDir\lib\linktest" -Force:$doForce | Out-Null
+#}
+
 if (!$?) { exit 1 }
 
 Set-Location ..
@@ -85,14 +84,8 @@ foreach ($subproject in $subprojects) {
       $lnkPath = "$projectDir\lib\"
       #$lnkName = $subproject
       $lnkName = $linkTarget
-        
-      if ($IsMacOS -or $IsLinux) { 
-        Write-Host New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget
-        New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget
-      } else { 
-        New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget
-        timeout /T 20
-      }
+      if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget } 
+      else { New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget }
       if ($?) { 
         # link creation successful, now we can safely delete old renamed file
         Remove-Item $projectDir/lib/tmp-openknx-restore
@@ -107,7 +100,7 @@ foreach ($subproject in $subprojects) {
   }
 }
 if ($subprojects.Count -le 1) {
-    Write-Host "Everything is fine, project is already in expected state"
+  Write-Host "Everything is fine, project is already in expected state"
 }
 Set-Location $currentDir
-if ($IsMacOS -or $IsLinux) { Start-Sleep -Seconds 5 } else { timeout /T 20 }
+if ($IsMacOS -or $IsLinux) { Start-Sleep -Seconds 5 } else { timeout /T 5 }
