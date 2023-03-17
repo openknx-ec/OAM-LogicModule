@@ -20,5 +20,4 @@ foreach ($subproject in $subprojects) {
     }
 }
 Set-Location restore
-#timeout /T 20
-Start-Sleep -Seconds 20 #Warum auch immer 20 sekunden. 
+if ($IsWinEnv) { timeout /T 20 } else { Start-Sleep -Seconds 5 }

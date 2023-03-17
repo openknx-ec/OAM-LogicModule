@@ -1,20 +1,45 @@
+# check on which os we are
+if ($PSVersionTable.PSVersion.Major -lt 6.0) {
+  switch ($([System.Environment]::OSVersion.Platform)) {
+      'Win32NT' { 
+          New-Variable -Option Constant -Name IsWindows -Value $True -ErrorAction SilentlyContinue
+          New-Variable -Option Constant -Name IsLinux -Value $false -ErrorAction SilentlyContinue
+          New-Variable -Option Constant -Name IsMacOs -Value $false -ErrorAction SilentlyContinue
+      }
+  }
+}
+$script:IsLinuxEnv = (Get-Variable -Name "IsLinux" -ErrorAction Ignore) -and $IsLinux
+$script:IsMacOSEnv = (Get-Variable -Name "IsMacOS" -ErrorAction Ignore) -and $IsMacOS
+$script:IsWinEnv = !$IsLinuxEnv -and !$IsMacOSEnv
+
+if ($IsLinuxEnv) { Write-Host "We are on Linux Env" }
+if ($IsMacOSEnv ) { Write-Host "We are on MacOS Env" }
+if ($IsWinEnv ) { Write-Host "We are on Windows Env" }
+
 # we assume, we start this script in projects "restore" directory
 $currentDir = Get-Location
 Set-Location ..
 $subprojects = Get-ChildItem -File lib
 Get-ChildItem -File lib
 $projectDir = Get-Location
+
+
 # we first check, if we are in Admin- or Developer mode and allowed to create symlinks:
-#cmd /c "mklink /D `"$projectDir\lib\linktest`" ..\restore"
-New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
-if (!$?) { 
-    Write-Host "You need Developer-Mode or Administrator privileges to execute this script!"
-    timeout /T 20
-    exit 1 
+if ($IsWinEnv) { 
+  cmd /c "mklink /D `"$projectDir\lib\linktest`" ..\restore"
+  if (!$?) { 
+      Write-Host "You need Developer-Mode or Administrator privileges to execute this script!"
+      timeout /T 20
+      exit 1 
+  }
+  #cleanup after test
+  cmd /c "rmdir `"$projectDir\lib\linktest`""
+
+} else {
+  New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
+  # cleanup after test
+  Remove-Item -Path "$projectDir\lib\linktest" -Force
 }
-# cleanup after test
-#cmd /c "rmdir `"$projectDir\lib\linktest`""
-Remove-Item -Path "$projectDir\lib\linktest" -Force
 if (!$?) { exit 1 }
 
 Set-Location ..
@@ -49,8 +74,8 @@ foreach ($subproject in $subprojects) {
         Rename-Item $projectDir/lib/$subproject.Name $projectDir/lib/tmp-openknx-restore
         if (!$?) { exit 1 }
         # this has to be a cmd-shell to work in developer mode
-        #cmd /c "mklink /D `"$projectDir\lib\$subproject`" ..\..\$subproject"
-        New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject.Name" -Value "..\..\$subproject.Name"
+        if ($IsWinEnv) { cmd /c "mklink /D `"$projectDir\lib\$subproject`" ..\..\$subproject" }
+        else { New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject.Name" -Value "..\..\$subproject.Name" }
 
         if ($?) { 
             # link creation successful, now we can safely delete old renamed file
@@ -67,5 +92,4 @@ if ($subprojects.Count -le 1) {
     Write-Host "Everything is fine, project is already in expected state"
 }
 Set-Location $currentDir
-#timeout /T 20
-Start-Sleep -Seconds 20 #Warum auch immer 20 sekunden. 
+if ($IsWinEnv) { timeout /T 20 } else { Start-Sleep -Seconds 5 }
