@@ -46,7 +46,8 @@ if (!$?) { exit 1 }
 Set-Location ..
 foreach ($subproject in $subprojects) {
   $cloned = 0
-  $ProjectFile = Get-ChildItem -File $projectDir"\lib\"$subproject | Select-Object BaseName
+  if ($IsMacOS -or $IsLinux) { $ProjectFile = Get-ChildItem -File $subproject | Select-Object BaseName }
+  else { $ProjectFile = Get-ChildItem -File $projectDir"\lib\"$subproject | Select-Object BaseName }
   if( ![string]::IsNullOrWhitespace($ProjectFile.BaseName) ) {
     if ($ProjectFile.BaseName -eq "knx")
     {
@@ -70,44 +71,38 @@ foreach ($subproject in $subprojects) {
     }
     if ($cloned)
     {
-        # here we have a potential problem case: 
-        #  - to create a link with mklink, we have to remove the existing file first
-        #  - if link creation fails, the file is missed, if we restart the script
-        # for robustness, we rename first and delete only if link creation was successful
-        Rename-Item $projectDir"\lib\"$subproject $projectDir"\lib\tmp-openknx-restore"
-        if (!$?) { exit 1 }
-        # this has to be a cmd-shell to work in developer mode
-        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path "$projectDir\lib\$subproject" -Value "..\..\$subproject" 
-		} else { 
-		  Write-Host "##############################################"
-      Write-Host "This is our current location: "
-      Get-Location
-      Write-Host "##############################################"
+      # here we have a potential problem case: 
+      #  - to create a link, we have to remove the existing file first
+      #  - if link creation fails, the file is missed, if we restart the script
+      # for robustness, we rename first and delete only if link creation was successful
+      if ($IsMacOS -or $IsLinux) { Rename-Item -Path $subproject -NewName tmp-openknx-restore }
+      else { Rename-Item $projectDir"\lib\"$subproject $projectDir"\lib\tmp-openknx-restore" }
+      if (!$?) { exit 1 }
+      # this has to be a cmd-shell to work in developer mode
       
+      #$linkTarget = "..\..\"+$ProjectFile.BaseName
+      $linkTarget = $ProjectFile.BaseName
       $lnkPath = "$projectDir\lib\"
-		  #$linkTarget = "..\..\"+$ProjectFile.BaseName
-		  $linkTarget = $ProjectFile.BaseName
       #$lnkName = $subproject
-		  $lnkName = $linkTarget
-      Write-Host "This will be now Called:" 
-      Write-Host New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget -Force
-		  Write-Host "##############################################"
-      
-      timeout /T 20
-      #New-Item -Path C:\Users\erkan\OAM-LogicModule\lib\ -Name knx.lnk -ItemType Junction -Value ..\..\knx
-		  New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget
-		  
-		}
+      $lnkName = $linkTarget
         
-        if ($?) { 
-            # link creation successful, now we can safely delete old renamed file
-            Remove-Item $projectDir/lib/tmp-openknx-restore
-            if (!$?) { exit 1 }
-        } else {
-            # link creation failed, we restore previous state and leave script
-            Rename-Item $projectDir/lib/tmp-openknx-restore $projectDir/lib/$subproject 
-            exit 1 
-        }
+      if ($IsMacOS -or $IsLinux) { 
+        Write-Host New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget
+        New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget
+      } else { 
+        New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget
+        timeout /T 20
+      }
+      if ($?) { 
+        # link creation successful, now we can safely delete old renamed file
+        Remove-Item $projectDir/lib/tmp-openknx-restore
+        if (!$?) { exit 1 }
+      } else {
+        # link creation failed, we restore previous state and leave script
+        if ($IsMacOS -or $IsLinux) { Rename-Item -Path $projectDir/lib/tmp-openknx-restore -NewName $ProjectFile.BaseName }
+        else { Rename-Item $projectDir/lib/tmp-openknx-restore $projectDir/lib/$subproject }
+        exit 1 
+      }
     }
   }
 }
