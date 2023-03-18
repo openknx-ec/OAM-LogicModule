@@ -29,19 +29,6 @@ $subprojects = Get-ChildItem -File lib
 Write-Host $subprojects
 $projectDir = Get-Location
 
-# Check if we can create SymbolicLink link
-#if ($IsMacOS -or $IsLinux) {
-  #New-Item -ItemType SymbolicLink -Path "$projectDir\lib\linktest" -Value "..\restore"
-  # cleanup after test
-  #Remove-Item -Path "$projectDir\lib\linktest" -Force 
-#} else {
-  #New-Item -Path $projectDir\lib -Name "linktest" -ItemType Junction -Value "restore"
-  # cleanup after test
-  #Remove-Item -Path "$projectDir\lib\linktest" -Force:$doForce | Out-Null
-#}
-
-if (!$?) { exit 1 }
-
 Set-Location ..
 foreach ($subproject in $subprojects) {
   $cloned = 0
