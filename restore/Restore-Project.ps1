@@ -14,57 +14,61 @@ $script:IsLinuxEnv = (Get-Variable -Name "IsLinux" -ErrorAction Ignore) -and $Is
 $script:IsMacOSEnv = (Get-Variable -Name "IsMacOS" -ErrorAction Ignore) -and $IsMacOS
 $script:IsWinEnv = !$IsLinuxEnv -and !$IsMacOSEnv
 
-if ($IsLinuxEnv) { Write-Host -ForegroundColor Yellow "We are on Linux Build Enviroment" }
-if ($IsMacOSEnv ) { Write-Host -ForegroundColor Yellow "We are on MacOS Build Enviroment" }
-if ($IsWinEnv ) { Write-Host -ForegroundColor Yellow "We are on Windows Build Enviroment" }
-
 # we assume, we start this script in projects "restore" directory
 $currentDir = Get-Location
+
+# Go one directory back, to get the project dir.
 Set-Location ..
-
-# Get the files in sub dir /lib
-$subprojects = Get-ChildItem -File lib
-
-# Just for listing the Informations
-Write-Host $subprojects
 $projectDir = Get-Location
 
+# Get the files in sub dir /lib
+$subprojects = Get-ChildItem lib
+# Just for listing the Informations
+#Write-Host $subprojects
+
+# We are now Outside of the project directory
 Set-Location ..
+
+#Now go to all files listened in der lib directory (where the dependended source repositories will be linked)
 foreach ($subproject in $subprojects) {
+  # Check for existence
   $cloned = 0
-  if ($IsMacOS -or $IsLinux) { $ProjectFile = Get-ChildItem -File $subproject | Select-Object BaseName }
-  else { $ProjectFile = Get-ChildItem -File $projectDir"\lib\"$subproject | Select-Object BaseName }
+
+  #Obtain the basename of the files/folders. Reason here is that in some cases, for example if you wokring on different OS and FS, 
+  #we need to extract only the basenames on the linked files/folders
+  if ($IsMacOS -or $IsLinux) { $ProjectFile = Get-Item $subproject | Select-Object BaseName }
+  else { $ProjectFile = Get-Item $projectDir"\lib\"$subproject | Select-Object BaseName }
+  
+  # Check for emtpy entries
   if( ![string]::IsNullOrWhitespace($ProjectFile.BaseName) ) {
-    if ($ProjectFile.BaseName -eq "knx")
+    if ($ProjectFile.BaseName -ne "README")
     {
-        # the following command may fail, because the project might already have been cloned
-        git clone https://github.com/thelsing/knx.git
-        if (!$?) { 
-            Write-Host -ForegroundColor Yellow "If the above message was 'fatal: ... already exists' then you can ignore this message, the project is already cloned"
+      # Check and clone the depended OpenKNX git repos.
+      #Write-Host Test-Path $ProjectFile.BaseName\.git
+      $GitPath = $ProjectFile.BaseName+"\.git"
+      if (Test-Path $GitPath) { Write-Host -ForegroundColor Yellow "Target Repo:"$ProjectFile.BaseName"already exists. Skip cloning." } 
+      else 
+      {
+        if ($ProjectFile.BaseName -eq "knx") {
+          $GitClone= "https://github.com/thelsing/knx.git"
+        } else { 
+          $GitClone= "https://github.com/OpenKNX/"+$ProjectFile.BaseName+".git" 
         }
-        $cloned = 1
-    }
-    elseif ($ProjectFile.BaseName -ne "README")
-    {
-        # the following command may fail, because the project might already have been cloned
-        $GitClone= "https://github.com/OpenKNX/"+$ProjectFile.BaseName+".git" 
-        Write-Host -ForegroundColor Yellow $GitClone
+        Write-Host -ForegroundColor Yellow "Target Repo:"$ProjectFile.BaseName"does not exists - cloning."$GitClone
         git clone $GitClone
-        if (!$?) { 
-            Write-Host -ForegroundColor Yellow "If the above message was 'fatal: ... already exists' then you can ignore this message, the project is already cloned"
-        }
         $cloned = 1
+      }
+      if (!$?) { exit 1 }
     }
     if ($cloned)
     {
-      # here we have a potential problem case: 
+      # Here we have a potential problem case: 
       #  - to create a link, we have to remove the existing file first
       #  - if link creation fails, the file is missed, if we restart the script
       # for robustness, we rename first and delete only if link creation was successful
       if ($IsMacOS -or $IsLinux) { Rename-Item -Path $subproject -NewName tmp-openknx-restore }
       else { Rename-Item $projectDir"\lib\"$subproject $projectDir"\lib\tmp-openknx-restore" }
       if (!$?) { exit 1 }
-      # this has to be a cmd-shell to work in developer mode
       
       #$linkTarget = "..\..\"+$ProjectFile.BaseName
       $linkTarget = $ProjectFile.BaseName
@@ -75,7 +79,7 @@ foreach ($subproject in $subprojects) {
       else { New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget }
       if ($?) { 
         # link creation successful, now we can safely delete old renamed file
-        Remove-Item $projectDir/lib/tmp-openknx-restore
+        Remove-Item $projectDir/lib/tmp-openknx-restore -Recurse -Force
         if (!$?) { exit 1 }
       } else {
         # link creation failed, we restore previous state and leave script
@@ -86,8 +90,13 @@ foreach ($subproject in $subprojects) {
     }
   }
 }
-if ($subprojects.Count -le 1) {
-  Write-Host "Everything is fine, project is already in expected state"
+if ($?) 
+{
+  Write-Host -ForegroundColor Green "
+  Everything seems to be fine. The project is in expected state. 
+  To start a release build, you can now call: .\scripts\Build-Release.ps1"
 }
+
 Set-Location $currentDir
+Set-Location ..
 if ($IsMacOS -or $IsLinux) { Start-Sleep -Seconds 5 } else { timeout /T 5 }
