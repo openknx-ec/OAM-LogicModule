@@ -34,6 +34,7 @@ $subprojects = Get-ChildItem lib
 Set-Location ..
 
 #Now go to all files listened in der lib directory (where the dependended source repositories will be linked)
+#ToDo - Create a dependency file that includes information on dependent repositories, such as the symbolic link name and target Git repository.
 foreach ($subproject in $subprojects) {
   #Obtain the basename of the files/folders. Reason here is that in some cases, for example if you wokring on different OS and FS, 
   #we need to extract only the basenames on the linked files/folders
