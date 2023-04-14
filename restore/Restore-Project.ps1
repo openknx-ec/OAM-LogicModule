@@ -50,12 +50,10 @@ foreach ($subproject in $subprojects) {
       else {
         $GitClone = "https://github.com/OpenKNX/" + $ProjectFile.BaseName + ".git" 
         Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- Target does not exists."
-        
         try {
           Invoke-RestMethod -Uri $GitClone -Method Head -ErrorAction Stop; 
         }
         catch { $response = $false; }
-        
         if ($response) {
           Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- Cloning."$GitClone
           git clone -q $GitClone
@@ -71,25 +69,27 @@ foreach ($subproject in $subprojects) {
 
       $CreateSymLink = 1
       
+      $CheckExistingSymLink = $true
       # Check if there is a valid symlink
-
-    #  if ((Get-Item $subproject).Attributes.ToString().Contains("ReparsePoint")) {
-    #    # Seems that there is a valid link. Now lets get the linked Target of it
-    #    $symlink = (Get-Item $subproject).Target 
-    #    # Now, lets create target link path
-    #    if ($IsMacOS -or $IsLinux) { 
-    #      # Info - the symlink target here is differend handled
-    #      $linkTarget = "../../" + $ProjectFile.BaseName.ToString()
-    #    }
-    #    else { 
-    #      $linkTarget = Get-Item ((Get-Location).ToString() + "/" + $ProjectFile.BaseName.ToString()).ToString()
-    #    }
-    #    
-    #    if ($symlink.ToString() -eq $linkTarget.ToString()) { 
-    #      Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- A existing and valid symbolic link detected. Skip linking."([Char]0x221A)
-    #      $CreateSymLink = 0
-    #    }
-    #  }
+      if ($CheckExistingSymLink) {
+        if ((Get-Item $subproject).Attributes.ToString().Contains("ReparsePoint")) {
+          # Seems that there is a valid link. Now lets get the linked Target of it
+          $symlink = (Get-Item $subproject).Target 
+          # Now, lets create target link path
+          if ($IsMacOS -or $IsLinux) { 
+            # Info - the symlink target here is differend handled
+            $linkTarget = "../../" + $ProjectFile.BaseName.ToString()
+          }
+          else { 
+            $linkTarget = Get-Item ((Get-Location).ToString() + "/" + $ProjectFile.BaseName.ToString()).ToString()
+          }
+        
+          if ($symlink.ToString() -eq $linkTarget.ToString()) { 
+            Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- A existing and valid symbolic link detected. Skip linking."([Char]0x221A)
+            $CreateSymLink = 0
+          }
+        }
+      }
       
       # Create a symlink
       if ($CreateSymLink) {
@@ -110,7 +110,7 @@ foreach ($subproject in $subprojects) {
         $linkTarget = $ProjectFile.BaseName
         $lnkPath = $projectDir.ToString() + "\lib\"
         $lnkName = $linkTarget
-        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget -Force -Confirm:$false} 
+        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget } 
         else { 
           New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget -OutVariable output | Out-Null
         }
