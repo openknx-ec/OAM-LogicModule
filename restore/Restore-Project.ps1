@@ -1,9 +1,8 @@
 # check on which os we are running
 # After check, the Os-Informations are availibe in the PS-Env.
 if ($PSVersionTable.PSVersion.Major -lt 6.0) {
-  switch ($([System.Environment]::OSVersion.Platform)) 
-  { 'Win32NT' 
-    { 
+  switch ($([System.Environment]::OSVersion.Platform)) {
+    'Win32NT' { 
       New-Variable -Option Constant -Name IsWindows -Value $True -ErrorAction SilentlyContinue
       New-Variable -Option Constant -Name IsLinux -Value $false -ErrorAction SilentlyContinue
       New-Variable -Option Constant -Name IsMacOs -Value $false -ErrorAction SilentlyContinue
@@ -42,65 +41,76 @@ foreach ($subproject in $subprojects) {
   else { $ProjectFile = Get-Item $projectDir"\lib\"$subproject | Select-Object BaseName }
   
   # Check for emtpy entries
-  if( ![string]::IsNullOrWhitespace($ProjectFile.BaseName) ) {
+  if ( ![string]::IsNullOrWhitespace($ProjectFile.BaseName) ) {
     if ($ProjectFile.BaseName -ne "README") {
       # Check and clone the depended OpenKNX git repos.
-      $GitPath = $ProjectFile.BaseName+"\.git"
+      $response = $true;
+      $GitPath = $ProjectFile.BaseName + "\.git"
       if (Test-Path $GitPath) { Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- Target repo already exists. Skip cloning." ([Char]0x221A) }
-      else 
-      {
-        if ($ProjectFile.BaseName -eq "knx") {
-          $GitClone= "https://github.com/thelsing/knx.git"
-        } else { 
-          $GitClone= "https://github.com/OpenKNX/"+$ProjectFile.BaseName+".git" 
+      else {
+        $GitClone = "https://github.com/OpenKNX/" + $ProjectFile.BaseName + ".git" 
+        Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- Target does not exists."
+        
+        try {
+          Invoke-RestMethod -Uri $GitClone -Method Head -ErrorAction Stop; 
         }
-        Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- Target does not exists - cloning."$GitClone
-        git clone $GitClone
+        catch { $response = $false; }
+        
+        if ($response) {
+          Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- Cloning."$GitClone
+          git clone -q $GitClone
+        }
+        else {
+          Write-Host -ForegroundColor Red "-"$ProjectFile.BaseName"- Cloning Error! Repository does not exist: "$GitClone
+        }
       }
-      if (!$?) { exit 1 }
+      if (!$? -or !$response) { 
+        Write-Host -ForegroundColor Red "An unexpected Error occurred. The project is not in expected state."([Char]0x2717)
+        exit 1 
+      }
 
       $CreateSymLink = 1
       
       # Check if there is a valid symlink
-      if( (Get-Item $subproject -ErrorAction SilentlyContinue) -and 
-          (Test-Path -Path (Get-Item $subproject ).ToString() -ErrorAction SilentlyContinue))
-      {
-        $symlink = Get-Item $subproject
-        if ($IsMacOS -or $IsLinux) {
-          # Info - the symlink here are differend handled
-          $symlink = (Get-Item $subproject).Target 
-          $linkTarget = "../../"+$ProjectFile.BaseName.ToString()
-        }
-        else { 
-          $linkTarget = Get-Item ((Get-Location).ToString()+"/"+$ProjectFile.BaseName.ToString()).ToString() 
-        }
-        
-        if ($symlink.ToString() -eq $linkTarget.ToString()) { 
-          Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- A existing and valid symbolic link detected. Skip linking."([Char]0x221A)
-          $CreateSymLink = 0
-        }
-      }
+
+    #  if ((Get-Item $subproject).Attributes.ToString().Contains("ReparsePoint")) {
+    #    # Seems that there is a valid link. Now lets get the linked Target of it
+    #    $symlink = (Get-Item $subproject).Target 
+    #    # Now, lets create target link path
+    #    if ($IsMacOS -or $IsLinux) { 
+    #      # Info - the symlink target here is differend handled
+    #      $linkTarget = "../../" + $ProjectFile.BaseName.ToString()
+    #    }
+    #    else { 
+    #      $linkTarget = Get-Item ((Get-Location).ToString() + "/" + $ProjectFile.BaseName.ToString()).ToString()
+    #    }
+    #    
+    #    if ($symlink.ToString() -eq $linkTarget.ToString()) { 
+    #      Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- A existing and valid symbolic link detected. Skip linking."([Char]0x221A)
+    #      $CreateSymLink = 0
+    #    }
+    #  }
       
       # Create a symlink
-      if ($CreateSymLink)
-      {
-        Write-Host -ForegroundColor Yellow "-"$ProjectFile.BaseName"- No valid symbolic link detected. Creating new symbolic link."
+      if ($CreateSymLink) {
+        Write-Host -ForegroundColor Green "-"$ProjectFile.BaseName"- No valid symbolic link detected. Creating new symbolic link."
         # Here we have a potential problem case: 
         #  - to create a link, we have to remove the existing file first
         #  - if link creation fails, the file is missed, if we restart the script
         # for robustness, we rename first and delete only if link creation was successful
         if ($IsMacOS -or $IsLinux) { 
           Rename-Item -Path $subproject -NewName tmp-openknx-restore 
-        } else { 
+        }
+        else { 
           Rename-Item $projectDir"\lib\"$subproject $projectDir"\lib\tmp-openknx-restore" 
         }
 
         if (!$?) { exit 1 }
 
         $linkTarget = $ProjectFile.BaseName
-        $lnkPath = $projectDir.ToString()+"\lib\"
+        $lnkPath = $projectDir.ToString() + "\lib\"
         $lnkName = $linkTarget
-        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget } 
+        if ($IsMacOS -or $IsLinux) { New-Item -ItemType SymbolicLink -Path $subproject -Value ..\..\$linkTarget -Force -Confirm:$false} 
         else { 
           New-Item -Path $lnkPath -Name $lnkName -ItemType Junction -Value $linkTarget -OutVariable output | Out-Null
         }
@@ -108,7 +118,8 @@ foreach ($subproject in $subprojects) {
           # link creation successful, now we can safely delete old renamed file
           Remove-Item $projectDir/lib/tmp-openknx-restore -Recurse -Force
           if (!$?) { exit 1 }
-        } else {
+        }
+        else {
           # link creation failed, we restore previous state and leave script
           if ($IsMacOS -or $IsLinux) { Rename-Item -Path $projectDir/lib/tmp-openknx-restore -NewName $ProjectFile.BaseName }
           else { Rename-Item $projectDir/lib/tmp-openknx-restore $projectDir/lib/$subproject }
@@ -119,14 +130,12 @@ foreach ($subproject in $subprojects) {
   }
 }
 
-if ($?) 
-{
+if ($?) {
   Write-Host -ForegroundColor Green "
   Everything seems to be fine. The project is in expected state."([Char]0x221A)
   Write-Host -ForegroundColor Blue "
   "([Char]0x2139) "To start a release build, you can now call: .\scripts\Build-Release.ps1
   "
-  
 }
 
 Set-Location $currentDir
