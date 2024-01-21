@@ -51,11 +51,7 @@ param(
   # Check for privileges (Windows only)
   [switch]$CheckForDeveloperMode= $true,  # Default is $true
   [switch]$CheckForSymbolicLinkPermissions= $true, # Default is $true
-  [switch]$CheckForAdminOnly= $false, # Default is $false
-
-  # Set the Write-Host message behavior
-  [switch]$Verbose= $false, # Default is $false
-  [switch]$DebugMsg= $false  # Default is $false
+  [switch]$CheckForAdminOnly= $false # Default is $false
 )
 
 # Global Variables
@@ -67,7 +63,9 @@ $Auto_Use_mklink_To_Create_SymLinks = $false # Default is $false
 # Ignore the permissions to create symbolic links with 'New-Item' and use mklink to create symbolic links.
 $Force_Use_mklink_To_Create_SymLinks = $true # Default is $true. If $Auto_Use_mklink_To_Create_SymLinks is $true, this variable is ignored.
 
-
+# Set the Write-Host message behavior
+[switch]$Verbose= $false # Default is $false
+[switch]$DebugMsg= $false  # Default is $false
 
 function Test-Administrator {
   return (([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')).If($true, $false)
@@ -241,9 +239,7 @@ function ProcessDependencies($DependenciesFile) {
         # Extract the project name from the URL
         $urlParts = $url -split '/'
         $projectNameWithExtension = $urlParts[-1]
-        # Assuming the project name is the same as the repository name,
-        # and considering the possibility of a .git extension to fix a 'dot' in the project name.
-        $projectName = $projectNameWithExtension.Substring(0, $projectNameWithExtension.LastIndexOf('.'))
+        $projectName = $projectNameWithExtension -split '\.' | Select-Object -First 1
         # Create a custom object for the project
         [PSCustomObject]@{
           "Hash" = $hash

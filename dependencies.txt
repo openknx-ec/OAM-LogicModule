@@ -1,5 +1,5 @@
 ------- Built with -------
-a870dd8 master lib/knx https://github.com/OpenKNX/knx
+a870dd8 devel lib/knx https://github.com/OpenKNX/knx
 309dd74 v1 lib/OFM-FileTransferModule https://github.com/OpenKNX/OFM-FileTransferModule.git
 91c9d8c v1 lib/OFM-LogicModule https://github.com/OpenKNX/OFM-LogicModule.git
 52eee6b v1 lib/OFM-Network https://github.com/OpenKNX/OFM-Network.git
